@@ -1,0 +1,71 @@
+pair<size_t, size_t> current = treasure_location; 
+    map[treasure_location.first][treasure_location.second].change_type('X'); 
+
+    pair <size_t, size_t> next;  
+
+        while (map[next.first][next.second].get_type() != '@') {
+            char c = map[current.first][current.second].get_direction(); 
+            char n; 
+
+            if (map[current.first][current.second].get_direction() == 'N'){
+                next = {current.first+1, current.second}; 
+                n = 'N'; 
+            }
+            else if (map[current.first][current.second].get_direction() == 'S'){
+                next = {current.first-1, current.second}; 
+                n = 'S'; 
+            }
+            else if (map[current.first][current.second].get_direction() == 'W'){
+                next = {current.first, current.second +1}; 
+                n = 'W'; 
+            }
+            else if (map[current.first][current.second].get_direction() == 'E'){
+                next = {current.first, current.second-1}; 
+                n ='E'; 
+            }
+            if (c == 'N'){
+                if (n =='E' || n =='W'){
+                    map[current.first+1][current.second].change_type('+'); 
+                }
+                else if (n == 'S' || n == 'N'){
+                    map[current.first+1][current.second].change_type('|'); 
+                }
+            }
+
+            else if (c == 'S'){
+                if (n =='E' || n =='W'){
+                    map[current.first-1][current.second].change_type('+'); 
+                }
+                else if (n == 'S' || n == 'N'){
+                    map[current.first-1][current.second].change_type('|'); 
+                }
+            }
+
+            else if (c == 'E'){
+                if (n =='S' || n =='N'){
+                    map[current.first][current.second-1].change_type('+'); 
+                }
+                else if (n == 'E' || n == 'W'){
+                    map[current.first][current.second-1].change_type('-'); 
+                }
+            }
+
+            else if (c == 'W'){
+                if (n == 'S' || n =='N'){
+                     map[current.first][current.second+1].change_type('+'); 
+                }
+                else if (n == 'E' || n == 'W'){
+                    map[current.first][current.second+1].change_type('-'); 
+                }
+            }
+
+            current = next;             
+        }
+
+        for (size_t r = 0; r < dimention; r++){
+            for (size_t c = 0; c < dimention; c++){
+                cout << map[r][c].get_type(); 
+            }
+
+            cout << '\n'; 
+        }
