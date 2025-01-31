@@ -8,14 +8,11 @@
 #include <stack>
 #include <queue>
 #include "coordinate.h"
+#include "pair.h"
 #include <cstdlib> // For atoi
 
 //Project Identifier: 40FB54C86566B9DDEAB902CC80E8CE85C1C62AAD
 
-
-
-//change the scope of the vectors for land and water locations and just print them in the functions for find path 
-// break right after you find the treasure 
 // 
 // ----------------------------------------------------------------------------
 //                    TreasureHunt Declarations
@@ -35,12 +32,12 @@ public:
     // to be used in the driver
     void hunt();
 
-    void land_hunt(pair<size_t, size_t> &land_coordinates); 
+    void land_hunt(Pair &land_coordinates); 
 
-    void sail_north(deque<pair<size_t,size_t>> & captian); 
-    void sail_south(deque<pair<size_t,size_t>> & captian); 
-    void sail_east(deque<pair<size_t,size_t>> & captian); 
-    void sail_west(deque<pair<size_t,size_t>> & captian); 
+    void sail_north(); 
+    void sail_south(); 
+    void sail_east(); 
+    void sail_west(); 
     //change back to a public for deque    
 
     void print_stats(); 
@@ -49,20 +46,22 @@ public:
     void find_path_list(); 
     void count_path(); 
 
+    void print_path_list(); 
+    void print_path_map();
+
 private:
 
-    pair<size_t,size_t> search_location; // hold the currect search location
-    pair<size_t,size_t> sail_location;  // hold the current sail location 
+    Pair search_location; // hold the currect search location
+    Pair sail_location = {0,0};  // hold the current sail location 
 
     char filetype; // this is either Map or List
-    size_t dimention; // will determine how large the vector is to hold the whole map 
+    size_t dimention = 0; // will determine how large the vector is to hold the whole map 
     int num_water_locations = 0; // to print out
     int num_land_locations = 0; // to print out 
     int times_ashore = 0; // to print out 
-    pair<size_t,size_t> starting_location; 
-    pair<size_t,size_t> treasure_location; 
+    Pair starting_location; 
+    Pair treasure_location; 
     bool treasure_found = false; 
-
     // all of these are to keep track of what is specificed on the options on command line 
     string hunt_order = "NESW"; 
     string c_option = "STACK"; 
@@ -73,6 +72,10 @@ private:
     char type_path = 'L'; 
 
     int path_length =0; 
+
+    deque<Pair> captian; 
+    vector<Pair> land_locs; 
+    vector<Pair> water_locs; 
 
 
     vector<vector<Coordinate>> map; // the vector that will act as a map and will be filled when read_data is called 
@@ -132,7 +135,6 @@ void TreasureHunt::get_options(int argc, char** argv) {
                 string arg {optarg}; 
                 if (arg != "QUEUE" && arg != "STACK"){
                     cerr << "Invalid argument to --captain" << '\n'; 
-                    cerr << "I dont recognize: " << arg << '\n'; 
                     exit(1); 
                 }
 
@@ -202,8 +204,8 @@ void TreasureHunt::get_options(int argc, char** argv) {
                 break; 
 
             case 'p': {
-                char arg {optarg[0]}; 
-                if ((arg != 'M' && arg != 'L')){
+                string arg {optarg}; 
+                if ((arg != "M" && arg != "L")){
                     cerr << "Invalid argument to --show-path" << '\n'; 
                     cerr << "I dont recognize: " << arg << '\n'; 
                     exit(1); 
@@ -215,11 +217,10 @@ void TreasureHunt::get_options(int argc, char** argv) {
                 p_option = true; 
 
 
-                if (arg == 'M'){
+                if (arg == "M"){
                     type_path = 'M'; 
                 }
                 break; 
-
             }
 
             case 'h':
@@ -260,11 +261,13 @@ void TreasureHunt::read_data() {
                 for (size_t r = 0; r < dimention; r++){
                     for (size_t c = 0; c < dimention; c++){
                         cin >> type; 
-                        pair<int, int> coordinates = {r,c}; 
-                        Coordinate new_coordinate (type ,'1', false); 
+                        Pair coordinates = {r,c}; 
+                        Coordinate new_coordinate = {type ,'1'}; 
                         map[r][c] =  new_coordinate; 
                         if (type == '@'){
                             starting_location = coordinates; 
+                            map[r][c].direction = 'K'; 
+
                         }
                     }
                 }
@@ -272,7 +275,7 @@ void TreasureHunt::read_data() {
     
     else if (filetype == 'L'){
         
-        Coordinate c; 
+        Coordinate c = {'.', '1'}; 
         map.resize(dimention, vector<Coordinate>(dimention, c)); 
 
         size_t row, col;
@@ -283,11 +286,12 @@ void TreasureHunt::read_data() {
             row = static_cast<size_t>(word) - '0'; 
             cin >> col; 
             cin >> type;
-            pair<int,int> coordinates = {row, col}; 
-            Coordinate c (type, '1', false); 
+            Pair coordinates = {row, col}; 
+            Coordinate c = {type, '1'}; 
             map[row][col] = c; 
             if (type == '@'){
                 starting_location = coordinates; 
+                map[row][col].direction = 'K'; 
             }
         }
     }
@@ -298,14 +302,12 @@ void TreasureHunt::read_data() {
 // Sort and print the data.
 void TreasureHunt::hunt() {
 
-    deque<pair<size_t, size_t> > captian;
-
     captian.push_back(starting_location); 
 
-    map[starting_location.first]
-        [starting_location.second].is_discovered(); 
+    //map[starting_location.first]
+        //[starting_location.second]; 
     
-    sail_location =  {starting_location.first, starting_location.second}; 
+    sail_location = {starting_location.first, starting_location.second}; 
 
     if (verbose_option){
         cout << "Treasure hunt started at: " << 
@@ -331,33 +333,32 @@ void TreasureHunt::hunt() {
 
         for (char d: hunt_order){
 
-            if (d == 'N' && current_row != 0 && map[current_row-1][current_col].get_type() != '#' && 
-                !map[current_row-1][current_col].get_if_discovered()){
-                sail_north(captian); 
+            if (d == 'N' && current_row != 0 && map[current_row-1][current_col].direction == '1'){
+                sail_north(); 
                 if (treasure_found){
                     break; 
                 }
             } //end if for north direction
 
-            else if (d == 'S' && current_row != dimention -1 && map[current_row+1][current_col].get_type() != '#' && 
-                !map[current_row+1][current_col].get_if_discovered()){
-                sail_south(captian); 
+            else if (d == 'S' && current_row != dimention -1 && 
+                map[current_row+1][current_col].direction == '1'){
+                sail_south(); 
                 if (treasure_found){
                     break; 
                 }
             }
 
-            else if (d == 'E' && current_col != dimention -1 && map[current_row][current_col+1].get_type() != '#' && 
-                !map[current_row][current_col+1].get_if_discovered()){
-                    sail_east(captian);
+            else if (d == 'E' && current_col != dimention -1 && 
+                map[current_row][current_col+1].direction == '1'){
+                    sail_east();
                     if (treasure_found){
                         break; 
                     } 
             }    
 
-            else if (d == 'W' && current_col != 0 && map[current_row][current_col-1].get_type() != '#' && 
-                !map[current_row][current_col-1].get_if_discovered()){
-                    sail_west(captian); 
+            else if (d == 'W' && current_col != 0 && 
+                    map[current_row][current_col-1].direction == '1'){
+                    sail_west(); 
                     if (treasure_found){
                         break;
                     }
@@ -370,17 +371,23 @@ void TreasureHunt::hunt() {
     }
 
 
-    count_path(); 
+    if( p_option && type_path =='L' && treasure_found){
+        find_path_list(); 
+    }
+    
+    if (treasure_found){
+        find_path_map(); 
+    }
 
     if (stats_option){
         print_stats();
     }
 
     if (p_option && treasure_found && type_path == 'M'){
-        find_path_map(); 
+        print_path_map(); 
     }
     else if ( p_option && type_path =='L' && treasure_found){
-        find_path_list(); 
+        print_path_list(); 
     }
 
     if (treasure_found){
@@ -396,28 +403,26 @@ void TreasureHunt::hunt() {
         cout 
             << "No treasure found after investigating " 
             << num_water_locations + num_land_locations 
-            << " locations."; 
+            << " locations." << '\n'; 
     }
-
 
 } 
 
-void TreasureHunt::sail_north(deque<pair<size_t, size_t> > &captian){
+void TreasureHunt::sail_north(){
      //so we can easily access the locations on the other side of this location 
     size_t current_row = sail_location.first;
     size_t current_col = sail_location.second;
 
-    if (map[current_row-1][current_col].get_type() == '.'){
-        map[current_row-1][current_col].set_direction('N'); 
-        map[current_row-1][current_col].is_discovered();
-        captian.push_back(make_pair(current_row-1, current_col));
-
+    if (map[current_row-1][current_col].type == '.'){
+        map[current_row-1][current_col].direction = 'N'; 
+        Pair c = {current_row-1, current_col}; 
+        captian.push_back(c);
     }
 
-    else if (map[current_row-1][current_col].get_type() == 'o' ||
-        map[current_row-1][current_col].get_type() == '$'){
-            map[current_row-1][current_col].set_direction('N');
-            pair<size_t,size_t> c = {current_row-1, current_col}; 
+    else if (map[current_row-1][current_col].type == 'o' ||
+        map[current_row-1][current_col].type == '$'){
+            map[current_row-1][current_col].direction = 'N';
+            Pair c = {current_row-1, current_col}; 
             land_hunt(c);
             times_ashore ++; 
             if (verbose_option){
@@ -446,23 +451,23 @@ void TreasureHunt::sail_north(deque<pair<size_t, size_t> > &captian){
 
 }
 
-void TreasureHunt::sail_south(deque<pair<size_t, size_t> > &captian){
+void TreasureHunt::sail_south(){
 
     size_t current_row = sail_location.first;
     size_t current_col = sail_location.second;
 
-    if (map[current_row+1][current_col].get_type() == '.'){
+    if (map[current_row+1][current_col].type == '.'){
 
-                    map[current_row+1][current_col].is_discovered(); 
-                    map[current_row+1][current_col].set_direction('S'); 
-                    captian.push_back(make_pair(current_row+1, current_col)); 
+                    map[current_row+1][current_col].direction = 'S'; 
+                    Pair c = {current_row+1, current_col}; 
+                    captian.push_back(c); 
 
-                }
+    }
 
-                else if (map[current_row+1][current_col].get_type() == 'o' ||
-                        map[current_row+1][current_col].get_type() == '$'){
-                            map[current_row+1][current_col].set_direction('S');
-                            pair<size_t,size_t> south = {current_row+1,current_col}; 
+    else if (map[current_row+1][current_col].type == 'o' ||
+         map[current_row+1][current_col].type == '$'){
+                            map[current_row+1][current_col].direction = 'S';
+                            Pair south = {current_row+1,current_col}; 
                             land_hunt(south); 
                             times_ashore++;
                             if (verbose_option){
@@ -492,22 +497,22 @@ void TreasureHunt::sail_south(deque<pair<size_t, size_t> > &captian){
 
 }
 
-void TreasureHunt::sail_east(deque<pair<size_t, size_t> > &captian){
+void TreasureHunt::sail_east(){
     size_t current_row = sail_location.first;
     size_t current_col = sail_location.second;
 
-    if (map[current_row][current_col+1].get_type() == '.'){
+    if (map[current_row][current_col+1].type == '.'){
 
-        map[current_row][current_col+1].is_discovered(); 
-        map[current_row][current_col+1].set_direction('E'); 
-        captian.push_back(make_pair(current_row, current_col+1)); 
+        map[current_row][current_col+1].direction = 'E'; 
+        Pair c = {current_row, current_col+1};
+        captian.push_back(c); 
 
     }
 
-    else if (map[current_row][current_col+1].get_type() == 'o' ||
-            map[current_row][current_col+1].get_type() == '$'){
-            map[current_row][current_col+1].set_direction('E'); 
-            pair<size_t,size_t> east = {current_row,current_col+1}; 
+    else if (map[current_row][current_col+1].type == 'o' ||
+            map[current_row][current_col+1].type == '$'){
+            map[current_row][current_col+1].direction = 'E'; 
+            Pair east = {current_row,current_col+1}; 
             land_hunt(east); 
             times_ashore++;
         if (verbose_option){
@@ -535,22 +540,21 @@ void TreasureHunt::sail_east(deque<pair<size_t, size_t> > &captian){
     }
 }
 
-void TreasureHunt::sail_west(deque<pair<size_t, size_t> > &captian){
+void TreasureHunt::sail_west(){
     size_t current_row = sail_location.first;
     size_t current_col = sail_location.second;
 
-    if (map[current_row][current_col-1].get_type() == '.'){
+    if (map[current_row][current_col-1].type == '.'){
 
-        map[current_row][current_col-1].is_discovered(); 
-        map[current_row][current_col-1].set_direction('W'); 
-        captian.push_back(make_pair(current_row, current_col-1)); 
-
+        map[current_row][current_col-1].direction = 'W'; 
+        Pair c = {current_row, current_col-1}; 
+        captian.push_back(c); 
     }
 
-    else if (map[current_row][current_col-1].get_type() == 'o' ||
-            map[current_row][current_col-1].get_type() == '$'){
-                map[current_row][current_col-1].set_direction('W'); 
-                pair<size_t,size_t> west = {current_row,current_col-1}; 
+    else if (map[current_row][current_col-1].type == 'o' ||
+            map[current_row][current_col-1].type == '$'){
+                map[current_row][current_col-1].direction = 'W'; 
+                Pair west = {current_row,current_col-1}; 
                 land_hunt(west); 
                 times_ashore++; 
         if (verbose_option){
@@ -578,13 +582,12 @@ void TreasureHunt::sail_west(deque<pair<size_t, size_t> > &captian){
     }
 }
 
-void TreasureHunt::land_hunt( pair<size_t, size_t> &cor){
+void TreasureHunt::land_hunt( Pair &cor){
 
-    deque <pair<size_t, size_t> > first_mate; 
+    deque <Pair> first_mate; 
     
-
-    first_mate.push_back(make_pair(cor.first,cor.second));
-    map[cor.first][cor.second].is_discovered(); 
+    Pair m = {cor.first,cor.second}; 
+    first_mate.push_back(m);
 
     while (!first_mate.empty() && !treasure_found){
         if (fm_option == "STACK"){
@@ -601,7 +604,7 @@ void TreasureHunt::land_hunt( pair<size_t, size_t> &cor){
             size_t current_row = search_location.first; 
             size_t current_col = search_location.second; //dont need to do this everytime put it outside the for loops
 
-            if (map[current_row][current_col].get_type() == '$'){
+            if (map[current_row][current_col].type == '$'){
                 treasure_found = true; 
                 treasure_location = {current_row,current_col};
             }
@@ -613,80 +616,71 @@ void TreasureHunt::land_hunt( pair<size_t, size_t> &cor){
                 break; 
             }
     
-            if (d == 'N' && current_row != 0 && map[current_row-1][current_col].get_type() != '#' &&
-                map[current_row-1][current_col].get_type() != '.'  &&  !map[current_row-1][current_col].get_if_discovered()){
-                    if (map[current_row-1][current_col].get_type() == '$'){
+            if (d == 'N' && current_row != 0 && map[current_row-1][current_col].type != '#' &&
+                map[current_row-1][current_col].type != '.'  && map[current_row-1][current_col].direction == '1'){
+                    if (map[current_row-1][current_col].type == '$'){
                         treasure_found = true; 
                         treasure_location = {current_row-1, current_col}; 
-                        map[current_row-1][current_col].set_direction('N'); 
-                        map[current_row-1][current_col].is_discovered(); 
+                        map[current_row-1][current_col].direction = 'N'; 
                         num_land_locations++; 
                         break; 
                     }
 
-                    else if (map[current_row-1][current_col].get_type() == 'o'){
-                        map[current_row-1][current_col].is_discovered(); 
-                        map[current_row-1][current_col].set_direction('N'); 
-                        first_mate.push_back(make_pair(current_row-1,current_col)); 
+                    else if (map[current_row-1][current_col].type == 'o'){
+                        map[current_row-1][current_col].direction = 'N'; 
+                        Pair p = {current_row-1,current_col}; 
+                        first_mate.push_back(p); 
                     }
                 }
 
-            else if (d == 'S' && current_row != dimention-1 && map[current_row+1][current_col].get_type() != '#' &&
-                map[current_row+1][current_col].get_type() != '.'  &&  !map[current_row+1][current_col].get_if_discovered()){
-                    if (map[current_row+1][current_col].get_type() == '$'){
+            else if (d == 'S' && current_row != dimention-1 && 
+                map[current_row+1][current_col].type != '.'  && map[current_row+1][current_col].direction == '1'){
+                    if (map[current_row+1][current_col].type == '$'){
                         treasure_found = true; 
                         treasure_location = {current_row+1,current_col}; 
-                        map[current_row+1][current_col].set_direction('S'); 
-                        map[current_row+1][current_col].is_discovered(); 
+                        map[current_row+1][current_col].direction = 'S'; 
                         num_land_locations++; 
-                        break; 
-
-                        
-
+                        break;
                     }
-                    else if (map[current_row+1][current_col].get_type() == 'o'){
-                        map[current_row+1][current_col].is_discovered(); 
-                        map[current_row+1][current_col].set_direction('S'); 
-                        first_mate.push_back(make_pair(current_row+1, current_col)); 
-
+                    else if (map[current_row+1][current_col].type == 'o'){
+                        map[current_row+1][current_col].direction = 'S';  
+                        Pair p = {current_row+1, current_col};
+                        first_mate.push_back(p); 
                     }
                 }
 
-            else if (d == 'E' && current_col != dimention-1 && map[current_row][current_col+1].get_type() != '#' &&
-                map[current_row][current_col+1].get_type() != '.'  &&  !map[current_row][current_col+1].get_if_discovered()){
-                    if (map[current_row][current_col+1].get_type() == '$'){
+            else if (d == 'E' && current_col != dimention-1 &&
+                map[current_row][current_col+1].type != '.'  && map[current_row][current_col+1].direction == '1'){
+                    if (map[current_row][current_col+1].type == '$'){
                         treasure_found = true; 
                         treasure_location = {current_row,current_col+1}; 
-                        map[current_row][current_col+1].set_direction('E'); 
-                        map[current_row][current_col+1].is_discovered(); 
+                        map[current_row][current_col+1].direction = 'E'; 
                         num_land_locations++; 
                         break; 
 
-
                     }
-                    else if (map[current_row][current_col+1].get_type() == 'o'){
-                        map[current_row][current_col+1].is_discovered(); 
-                        map[current_row][current_col+1].set_direction('E'); 
-                        first_mate.push_back(make_pair(current_row,current_col+1));
+                    else if (map[current_row][current_col+1].type == 'o'){
+                        map[current_row][current_col+1].direction = 'E'; 
+                        Pair p = {current_row,current_col+1}; 
+                        first_mate.push_back(p);
                     }
                 }
 
-            else if (d == 'W' && current_col != 0 && map[current_row][current_col-1].get_type() != '#' &&
-                map[current_row][current_col-1].get_type() != '.'  &&  !map[current_row][current_col-1].get_if_discovered()){
-                    if (map[current_row][current_col-1].get_type() == '$'){
+            else if (d == 'W' && current_col != 0 && 
+                map[current_row][current_col-1].type != '.' && map[current_row][current_col-1].direction == '1'){
+                    if (map[current_row][current_col-1].type == '$'){
                         treasure_found = true; 
                         treasure_location = {current_row,current_col-1};
-                        map[current_row][current_col-1].set_direction('W'); 
-                        map[current_row][current_col-1].is_discovered();  
+                        map[current_row][current_col-1].direction = 'W'; 
                          num_land_locations++; 
                          break; 
 
 
                     }
-                    else if (map[current_row][current_col-1].get_type() == 'o'){
-                        map[current_row][current_col-1].is_discovered(); 
-                        map[current_row][current_col-1].set_direction('W'); 
-                        first_mate.push_back(make_pair(current_row,current_col-1)); 
+                    else if (map[current_row][current_col-1].type == 'o'){
+                        map[current_row][current_col-1].direction = 'W'; 
+                        Pair p = {current_row,current_col-1}; 
+                        first_mate.push_back(p); 
 
                     }
                 }
@@ -724,93 +718,87 @@ void TreasureHunt::print_stats(){
 void TreasureHunt::find_path_map(){
 
     
-    pair<size_t,size_t> current = treasure_location; 
-    map[treasure_location.first][treasure_location.second].change_type('X'); 
+    Pair current = treasure_location; 
+    map[treasure_location.first][treasure_location.second].type = 'X'; 
 
-    pair<size_t,size_t> next(current.first,current.second); 
+    Pair next = {current.first,current.second}; 
 
-        while (map[next.first][next.second].get_type() != '@') {
+        while (map[next.first][next.second].direction != 'K') {
 
-            if (map[current.first][current.second].get_direction() == 'N'){
+            if (map[current.first][current.second].direction == 'N'){
                 next = {current.first+1 ,current.second}; 
             }
-            else if (map[current.first][current.second].get_direction() == 'S'){
+            else if (map[current.first][current.second].direction == 'S'){
                 next = {current.first-1,current.second}; 
             }
-            else if (map[current.first][current.second].get_direction() == 'W'){
+            else if (map[current.first][current.second].direction == 'W'){
                 next = {current.first, current.second +1}; 
             }
-            else if (map[current.first][current.second].get_direction() == 'E'){
+            else if (map[current.first][current.second].direction == 'E'){
                 next = {current.first,current.second -1}; 
             }
 
-            if ((map[current.first][current.second].get_direction() == 'S' || 
-                map[current.first][current.second].get_direction() == 'N')
-                && (map[next.first][next.second].get_direction() == 'E' ||
-                    map[next.first][next.second].get_direction() == 'W') ){
-                    map[next.first][next.second].change_type('+'); 
+            if ((map[current.first][current.second].direction == 'S' || 
+                map[current.first][current.second].direction == 'N')
+                && (map[next.first][next.second].direction == 'E' ||
+                    map[next.first][next.second].direction == 'W') ){
+                    map[next.first][next.second].type = '+'; 
                 }
 
-            else if ((map[next.first][next.second].get_direction() == 'S' || 
-                    map[next.first][next.second].get_direction() == 'N')
-                    && (map[current.first][current.second].get_direction() == 'E' || 
-                    map[current.first][current.second].get_direction() == 'W') ){
-                    map[next.first][next.second].change_type('+'); 
+            else if ((map[next.first][next.second].direction == 'S' || 
+                    map[next.first][next.second].direction == 'N')
+                    && (map[current.first][current.second].direction == 'E' || 
+                    map[current.first][current.second].direction == 'W') ){
+                    map[next.first][next.second].type = '+'; 
                 }
 
-            else if (map[next.first][next.second].get_direction() == 'S' || 
-                   map[next.first][next.second].get_direction() == 'N'){
-                    map[next.first][next.second].change_type('|'); 
+            else if (map[next.first][next.second]. direction == 'S' || 
+                   map[next.first][next.second].direction == 'N'){
+                    map[next.first][next.second].type = '|'; 
             }
 
-            else if (map[next.first][next.second].get_direction() == 'W' || 
-                    map[next.first][next.second].get_direction() == 'E'){
-                    map[next.first][next.second].change_type('-'); 
+            else if (map[next.first][next.second].direction == 'W' || 
+                    map[next.first][next.second].direction == 'E'){
+                    map[next.first][next.second].type = '-'; 
             }
 
-            current = next;             
+            current = next;   
+            path_length++;           
         }
 
-        for (size_t r = 0; r < dimention; r++){
-            for (size_t c = 0; c < dimention; c++){
-                cout << map[r][c].get_type(); 
-            }
-
-            cout << '\n'; 
-        }
+        
 
 }
 
 
 void TreasureHunt::find_path_list(){
-    pair<size_t,size_t> current = {treasure_location.first, treasure_location.second}; 
 
-    vector<pair<size_t,size_t>> land_locs; 
-    vector<pair<size_t,size_t>> water_locs; 
+    Pair current = treasure_location;
 
-    pair<size_t,size_t> next; 
+    Pair next; 
 
     land_locs.push_back(treasure_location); 
 
-    while (map[current.first][current.second].get_type() != '@'){
-        if (map[current.first][current.second].get_direction() == 'N'){
+    while (map[current.first][current.second].direction != 'K'){
+
+        if (map[current.first][current.second].direction == 'N'){
             next = {current.first+1,current.second}; 
         }
-        else if (map[current.first][current.second].get_direction() == 'S'){
+        else if (map[current.first][current.second].direction == 'S'){
             next = {current.first-1,current.second}; 
         }
-        else if (map[current.first][current.second].get_direction() == 'W'){
+        else if (map[current.first][current.second].direction == 'W'){
             next = {current.first,current.second+1}; 
         }
-        else if (map[current.first][current.second].get_direction() == 'E'){
+        else if (map[current.first][current.second].direction == 'E'){
             next = {current.first,current.second-1};
         }
 
-        if (map[next.first][next.second].get_type() == '.'){
+        if (map[next.first][next.second].type == '.'){
             water_locs.push_back(next); 
         }
-        else if (map[next.first][next.second].get_type() == 'o' || 
-                map[next.first][next.second].get_type() == '$'){
+        else if (map[next.first][next.second].type == 'o' || 
+                map[next.first][next.second].type == '$'){
             land_locs.push_back(next); 
         }
 
@@ -818,7 +806,11 @@ void TreasureHunt::find_path_list(){
 
     }   
     water_locs.push_back(starting_location); 
+}
 
+
+void TreasureHunt::print_path_list(){
+    
     cout << "Sail:" << '\n'; 
         for (size_t i = water_locs.size(); i > 0; i--){
             cout << water_locs[i-1].first << ',' << water_locs[i-1].second << '\n'; 
@@ -829,27 +821,14 @@ void TreasureHunt::find_path_list(){
         for (size_t i = land_locs.size(); i >0; i--){
             cout << land_locs[i-1].first << ',' << land_locs[i-1].second << '\n'; 
         }
+
 }
 
-void TreasureHunt::count_path(){
-    pair<size_t,size_t> current = {treasure_location.first, treasure_location.second}; 
-    pair<size_t, size_t> next; 
-
-   while (map[current.first][current.second].get_type() != '@'){
-        if (map[current.first][current.second].get_direction() == 'N'){
-            next = {current.first+1,current.second}; 
+void TreasureHunt::print_path_map(){
+    for (size_t r = 0; r < dimention; r++){
+            for (size_t c = 0; c < dimention; c++){
+                cout << map[r][c].type; 
+            }
+            cout << '\n'; 
         }
-        else if (map[current.first][current.second].get_direction() == 'S'){
-            next = {current.first-1,current.second}; 
-        }
-        else if (map[current.first][current.second].get_direction() == 'W'){
-            next = {current.first,current.second+1}; 
-        }
-        else if (map[current.first][current.second].get_direction() == 'E'){
-            next = {current.first,current.second-1};
-        }
-        current = next; 
-        path_length++; 
-    }  
-
 }
